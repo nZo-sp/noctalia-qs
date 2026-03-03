@@ -129,9 +129,10 @@ ParsedDesktopEntryData DesktopEntry::parseText(const QString& id, const QString&
 				else if (key == "Terminal") data.terminal = value == "true";
 				else if (key == "Categories") data.categories = value.split(u';', Qt::SkipEmptyParts);
 				else if (key == "Keywords") data.keywords = value.split(u';', Qt::SkipEmptyParts);
+				else if (key == "Actions") data.actionOrder = value.split(u';', Qt::SkipEmptyParts);
 			}
 		} else if (groupName.startsWith("Desktop Action ")) {
-			auto actionName = groupName.sliced(16);
+			auto actionName = groupName.sliced(15);
 			DesktopActionData action;
 			action.id = actionName;
 
@@ -213,10 +214,13 @@ void DesktopEntry::updateState(const ParsedDesktopEntryData& newState) {
 	Qt::endPropertyUpdateGroup();
 
 	this->state = newState;
-	this->updateActions(newState.actions);
+	this->updateActions(newState.actions, newState.actionOrder);
 }
 
-void DesktopEntry::updateActions(const QHash<QString, DesktopActionData>& newActions) {
+void DesktopEntry::updateActions(
+    const QHash<QString, DesktopActionData>& newActions,
+    const QVector<QString>& actionOrder
+) {
 	auto old = this->mActions;
 
 	for (const auto& [key, d]: newActions.asKeyValueRange()) {
@@ -242,6 +246,8 @@ void DesktopEntry::updateActions(const QHash<QString, DesktopActionData>& newAct
 	for (auto* leftover: old) {
 		leftover->deleteLater();
 	}
+
+	this->mActionOrder = actionOrder;
 }
 
 void DesktopEntry::execute() const {
@@ -250,7 +256,18 @@ void DesktopEntry::execute() const {
 
 bool DesktopEntry::isValid() const { return !this->bName.value().isEmpty(); }
 
-QVector<DesktopAction*> DesktopEntry::actions() const { return this->mActions.values(); }
+QVector<DesktopAction*> DesktopEntry::actions() const {
+	QVector<DesktopAction*> ordered;
+	ordered.reserve(this->mActionOrder.size());
+
+	for (const auto& id: this->mActionOrder) {
+		if (auto* act = this->mActions.value(id)) {
+			ordered.append(act);
+		}
+	}
+
+	return ordered;
+}
 
 QVector<QString> DesktopEntry::parseExecString(const QString& execString) {
 	QVector<QString> arguments;
