@@ -84,7 +84,7 @@ void NetworkManager::registerDevices() {
 			}
 		}
 
-		delete call;
+		call->deleteLater();
 	};
 
 	QObject::connect(call, &QDBusPendingCallWatcher::finished, this, responseCallback);
@@ -234,7 +234,7 @@ void NetworkManager::activateConnection(
 		if (reply.isError()) {
 			qCWarning(logNetworkManager) << "Failed to activate connection:" << reply.error().message();
 		}
-		delete call;
+		call->deleteLater();
 	};
 	QObject::connect(call, &QDBusPendingCallWatcher::finished, this, responseCallback);
 }
@@ -254,7 +254,7 @@ void NetworkManager::addAndActivateConnection(
 			qCWarning(logNetworkManager)
 			    << "Failed to add and activate connection:" << reply.error().message();
 		}
-		delete call;
+		call->deleteLater();
 	};
 	QObject::connect(call, &QDBusPendingCallWatcher::finished, this, responseCallback);
 }
