@@ -25,7 +25,10 @@ namespace qs::launch {
 namespace {
 
 void checkCrashRelaunch(char** argv, QCoreApplication* coreApplication) {
-#if CRASH_REPORTER
+#if !CRASH_REPORTER
+	(void)argv;
+	(void)coreApplication;
+#else
 	auto lastInfoFdStr = qEnvironmentVariable("__QUICKSHELL_CRASH_INFO_FD");
 
 	if (!lastInfoFdStr.isEmpty()) {

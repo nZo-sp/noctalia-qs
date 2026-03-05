@@ -157,6 +157,7 @@ void NetworkManager::registerFrontendDevice(NMDeviceType::Enum type, NMDevice* d
 			case NM80211Mode::Ap: return WifiDeviceMode::AccessPoint;
 			case NM80211Mode::Mesh: return WifiDeviceMode::Mesh;
 			}
+			Q_UNREACHABLE();
 		};
 		// clang-format off
 		frontendWifiDev->bindableMode().setBinding(translateMode);
@@ -179,6 +180,7 @@ void NetworkManager::registerFrontendDevice(NMDeviceType::Enum type, NMDevice* d
 		case 100: return DeviceConnectionState::Connected;
 		case 110 ... 120: return DeviceConnectionState::Disconnecting;
 		}
+		Q_UNREACHABLE();
 	};
 	// clang-format off
 	frontendDev->bindableName().setBinding([dev]() { return dev->interface(); });
