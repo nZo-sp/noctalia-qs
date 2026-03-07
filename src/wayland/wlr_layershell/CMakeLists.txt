@@ -10,6 +10,11 @@ qt_add_qml_module(quickshell-wayland-layershell
 	DEPENDENCIES QtQuick
 )
 
+set_target_properties(quickshell-wayland-layershell PROPERTIES
+	QT_QML_MODULE_FOREIGN_TYPES
+		"${CMAKE_SOURCE_DIR}/src/core/reload.hpp;${CMAKE_SOURCE_DIR}/src/window/proxywindow.hpp"
+)
+
 qs_add_module_deps_light(quickshell-wayland-layershell Quickshell Quickshell.Wayland)
 
 install_qml_module(quickshell-wayland-layershell)

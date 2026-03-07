@@ -7,6 +7,7 @@
 #include <qobject.h>
 #include <qpoint.h>
 #include <qproperty.h>
+#include <qqmlintegration.h>
 #include <qqmllist.h>
 #include <qqmlparserstatus.h>
 #include <qquickitem.h>
@@ -61,6 +62,7 @@ class ProxyWindowBase: public Reloadable {
 	Q_PROPERTY(QQmlListProperty<QObject> data READ data);
 	// clang-format on
 	Q_CLASSINFO("DefaultProperty", "data");
+	QML_ANONYMOUS;
 
 public:
 	explicit ProxyWindowBase(QObject* parent = nullptr);
