@@ -86,6 +86,9 @@ include(cmake/util.cmake)
 
 add_compile_options(-Wall -Wextra -Wno-vla-cxx-extension)
 
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+
 # pipewire defines this, breaking PCH
 add_compile_definitions(_REENTRANT)
 
