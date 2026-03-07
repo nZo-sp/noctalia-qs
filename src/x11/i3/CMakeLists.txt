@@ -17,7 +17,6 @@ qt_add_qml_module(quickshell-i3
 
 install_qml_module(quickshell-i3)
 
-qs_pch(quickshell-i3)
-qs_pch(quickshell-i3plugin)
+qs_module_pch(quickshell-i3)
 
 target_link_libraries(quickshell PRIVATE quickshell-i3plugin)
