@@ -2,7 +2,6 @@ qt_add_library(quickshell-dwl STATIC
 	output.cpp
 	tag.cpp
 	manager.cpp
-	proto.cpp
 	qml.cpp
 )
 
@@ -12,18 +11,17 @@ qt_add_qml_module(quickshell-dwl
 )
 
 install_qml_module(quickshell-dwl)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets WaylandClient)
+
+wl_proto(wlp-dwl-ipc dwl-ipc-unstable-v2 "${CMAKE_CURRENT_SOURCE_DIR}")
 
 target_link_libraries(quickshell-dwl PRIVATE
-	Qt6::Core
-	Qt6::Gui
-	Qt6::GuiPrivate
-	Qt6::Widgets
-	Qt6::WaylandClient
-	Qt6::WaylandClientPrivate
+	Qt::Core
+	Qt::Gui
+	Qt::GuiPrivate
+	Qt::WaylandClient
+	Qt::WaylandClientPrivate
 	Wayland::Client
+	wlp-dwl-ipc
 )
 
-target_link_libraries(quickshell PRIVATE
-	quickshell-dwl
-)
+target_link_libraries(quickshell PRIVATE quickshell-dwlplugin)

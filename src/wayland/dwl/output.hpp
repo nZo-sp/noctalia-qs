@@ -6,8 +6,8 @@
 #include <qstring.h>
 #include <qtmetamacros.h>
 #include <qtypes.h>
+#include <qwayland-dwl-ipc-unstable-v2.h>
 
-#include "proto.hpp"
 #include "tag.hpp"
 
 namespace qs::dwl {
@@ -17,7 +17,9 @@ namespace qs::dwl {
 /// window title, app ID, and fullscreen/floating flags.
 ///
 /// Obtain instances via @@DwlIpc.outputs.
-class DwlIpcOutput: public QObject {
+class DwlIpcOutput
+    : public QObject
+    , public QtWayland::zdwl_ipc_output_v2 {
 	Q_OBJECT;
 	QML_ELEMENT;
 	QML_UNCREATABLE("DwlIpcOutput instances are created by DwlIpc.");
@@ -42,7 +44,7 @@ class DwlIpcOutput: public QObject {
 	Q_PROPERTY(QString kbLayout READ kbLayout NOTIFY kbLayoutChanged);
 
 public:
-	explicit DwlIpcOutput(struct zdwl_ipc_output_v2* handle, QString name, QObject* parent = nullptr);
+	explicit DwlIpcOutput(::zdwl_ipc_output_v2* handle, QString name, QObject* parent = nullptr);
 
 	~DwlIpcOutput() override;
 
@@ -85,39 +87,21 @@ signals:
 	/// Emitted when all double-buffered state for this frame has been committed.
 	void frame();
 
+protected:
+	void zdwl_ipc_output_v2_toggle_visibility() override;
+	void zdwl_ipc_output_v2_active(uint32_t active) override;
+	void zdwl_ipc_output_v2_tag(uint32_t tag, uint32_t state, uint32_t clients, uint32_t focused)
+	    override;
+	void zdwl_ipc_output_v2_layout(uint32_t layout) override;
+	void zdwl_ipc_output_v2_title(const QString& title) override;
+	void zdwl_ipc_output_v2_appid(const QString& appid) override;
+	void zdwl_ipc_output_v2_layout_symbol(const QString& layout) override;
+	void zdwl_ipc_output_v2_frame() override;
+	void zdwl_ipc_output_v2_fullscreen(uint32_t is_fullscreen) override;
+	void zdwl_ipc_output_v2_floating(uint32_t is_floating) override;
+	void zdwl_ipc_output_v2_kb_layout(const QString& kb_layout) override;
+
 private:
-	// Static listener callbacks.
-	static void onToggleVisibility(void* data, struct zdwl_ipc_output_v2* /*unused*/);
-	static void onActive(void* data, struct zdwl_ipc_output_v2* /*unused*/, uint32_t active);
-	static void onTag(
-	    void* data,
-	    struct zdwl_ipc_output_v2* /*unused*/,
-	    uint32_t tag,
-	    uint32_t state,
-	    uint32_t clients,
-	    uint32_t focused
-	);
-
-	static void onLayout(void* data, struct zdwl_ipc_output_v2* /*unused*/, uint32_t layout);
-	static void onTitle(void* data, struct zdwl_ipc_output_v2* /*unused*/, const char* title);
-	static void onAppid(void* data, struct zdwl_ipc_output_v2* /*unused*/, const char* appid);
-	static void onLayoutSymbol(void* data, struct zdwl_ipc_output_v2* /*unused*/, const char* layout);
-	static void onFrame(void* data, struct zdwl_ipc_output_v2* /*unused*/);
-	static void
-	onFullscreen(void* data, struct zdwl_ipc_output_v2* /*unused*/, uint32_t isFullscreen);
-	static void
-	onFloating(void* data /*unused*/, struct zdwl_ipc_output_v2* /*unused*/, uint32_t isFloating);
-	static void
-	onIgnoredInt(void* /*unused*/, struct zdwl_ipc_output_v2* /*unused*/, int32_t /*unused*/) {}
-	static void
-	onIgnoredStr(void* /*unused*/, struct zdwl_ipc_output_v2* /*unused*/, const char* /*unused*/) {}
-	static void
-	onIgnoredUint(void* /*unused*/, struct zdwl_ipc_output_v2* /*unused*/, uint32_t /*unused*/) {}
-	static void onKbLayout(void* data, struct zdwl_ipc_output_v2* /*unused*/, const char* kbLayout);
-
-	static ZdwlIpcOutputV2Listener listener;
-
-	struct zdwl_ipc_output_v2* mHandle;
 	QString mOutputName;
 
 	// Committed state, updated atomically on frame.

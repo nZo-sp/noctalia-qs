@@ -4,7 +4,7 @@
 #include <QtCore/qtmetamacros.h>
 #include <QtTypes>
 
-#include "proto.hpp"
+#include "wayland-dwl-ipc-unstable-v2-client-protocol.h"
 
 namespace qs::dwl {
 

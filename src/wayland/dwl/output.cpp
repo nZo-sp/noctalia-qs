@@ -5,48 +5,20 @@
 #include <QList>
 #include <QObject>
 #include <QString>
-#include <QtCore/qtmetamacros.h>
 #include <QtTypes>
 
-#include "proto.hpp"
 #include "tag.hpp"
+#include "wayland-dwl-ipc-unstable-v2-client-protocol.h"
 
 namespace qs::dwl {
 
-ZdwlIpcOutputV2Listener DwlIpcOutput::listener = {
-    .toggleVisibility = &DwlIpcOutput::onToggleVisibility,
-    .active = &DwlIpcOutput::onActive,
-    .tag = &DwlIpcOutput::onTag,
-    .layout = &DwlIpcOutput::onLayout,
-    .title = &DwlIpcOutput::onTitle,
-    .appid = &DwlIpcOutput::onAppid,
-    .layoutSymbol = &DwlIpcOutput::onLayoutSymbol,
-    .frame = &DwlIpcOutput::onFrame,
-    .fullscreen = &DwlIpcOutput::onFullscreen,
-    .floating = &DwlIpcOutput::onFloating,
-    // Mango
-    .x = &DwlIpcOutput::onIgnoredInt,
-    .y = &DwlIpcOutput::onIgnoredInt,
-    .width = &DwlIpcOutput::onIgnoredInt,
-    .height = &DwlIpcOutput::onIgnoredInt,
-    .lastLayer = &DwlIpcOutput::onIgnoredStr,
-    .kbLayout = &DwlIpcOutput::onKbLayout,
-    .keymode = &DwlIpcOutput::onIgnoredStr,
-    .scalefactor = &DwlIpcOutput::onIgnoredUint,
-};
-
-DwlIpcOutput::DwlIpcOutput(struct zdwl_ipc_output_v2* handle, QString name, QObject* parent)
+DwlIpcOutput::DwlIpcOutput(::zdwl_ipc_output_v2* handle, QString name, QObject* parent)
     : QObject(parent)
-    , mHandle(handle)
-    , mOutputName(std::move(name)) {
-	zdwlIpcOutputV2AddListener(this->mHandle, &listener, this);
-}
+    , QtWayland::zdwl_ipc_output_v2(handle)
+    , mOutputName(std::move(name)) {}
 
 DwlIpcOutput::~DwlIpcOutput() {
-	if (this->mHandle) {
-		zdwlIpcOutputV2Release(this->mHandle);
-		this->mHandle = nullptr;
-	}
+	if (this->isInitialized()) this->release();
 }
 
 bool DwlIpcOutput::active() const { return this->mActive; }
@@ -61,12 +33,12 @@ QString DwlIpcOutput::kbLayout() const { return this->mKbLayout; }
 const QString& DwlIpcOutput::outputName() const { return this->mOutputName; }
 
 void DwlIpcOutput::setTags(quint32 tagmask, quint32 toggleTagset) {
-	zdwlIpcOutputV2SetTags(this->mHandle, tagmask, toggleTagset);
+	this->set_tags(tagmask, toggleTagset);
 }
 void DwlIpcOutput::setClientTags(quint32 andTags, quint32 xorTags) {
-	zdwlIpcOutputV2SetClientTags(this->mHandle, andTags, xorTags);
+	this->set_client_tags(andTags, xorTags);
 }
-void DwlIpcOutput::setLayout(quint32 index) { zdwlIpcOutputV2SetLayout(this->mHandle, index); }
+void DwlIpcOutput::setLayout(quint32 index) { this->set_layout(index); }
 
 void DwlIpcOutput::initTags(quint32 count) {
 	for (DwlTag* t: this->mTags) t->deleteLater();
@@ -76,136 +48,105 @@ void DwlIpcOutput::initTags(quint32 count) {
 	emit this->tagsChanged();
 }
 
-// Listener callbacks
+// Event overrides (double-buffered via frame)
 
-void DwlIpcOutput::onToggleVisibility(void* data, struct zdwl_ipc_output_v2* /*unused*/) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	emit self->toggleVisibility();
+void DwlIpcOutput::zdwl_ipc_output_v2_toggle_visibility() { emit this->toggleVisibility(); }
+
+void DwlIpcOutput::zdwl_ipc_output_v2_active(uint32_t active) {
+	this->mPending.hasActive = true;
+	this->mPending.active = active != 0;
 }
 
-void DwlIpcOutput::onActive(void* data, struct zdwl_ipc_output_v2* /*unused*/, uint32_t active) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasActive = true;
-	self->mPending.active = active != 0;
-}
-
-void DwlIpcOutput::onTag(
-    void* data,
-    struct zdwl_ipc_output_v2* /*unused*/,
+void DwlIpcOutput::zdwl_ipc_output_v2_tag(
     uint32_t tag,
     uint32_t state,
     uint32_t clients,
     uint32_t focused
 ) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	if (std::cmp_less(tag, self->mTags.size()))
-		self->mTags[static_cast<qsizetype>(tag)]->updateState(state, clients, focused);
+	if (std::cmp_less(tag, this->mTags.size()))
+		this->mTags[static_cast<qsizetype>(tag)]->updateState(state, clients, focused);
 }
 
-void DwlIpcOutput::onLayout(void* data, struct zdwl_ipc_output_v2* /*unused*/, uint32_t layout) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasLayoutIndex = true;
-	self->mPending.layoutIndex = layout;
+void DwlIpcOutput::zdwl_ipc_output_v2_layout(uint32_t layout) {
+	this->mPending.hasLayoutIndex = true;
+	this->mPending.layoutIndex = layout;
 }
 
-void DwlIpcOutput::onTitle(void* data, struct zdwl_ipc_output_v2* /*unused*/, const char* title) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasTitle = true;
-	self->mPending.title = QString::fromUtf8(title);
+void DwlIpcOutput::zdwl_ipc_output_v2_title(const QString& title) {
+	this->mPending.hasTitle = true;
+	this->mPending.title = title;
 }
 
-void DwlIpcOutput::onAppid(void* data, struct zdwl_ipc_output_v2* /*unused*/, const char* appid) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasAppId = true;
-	self->mPending.appId = QString::fromUtf8(appid);
+void DwlIpcOutput::zdwl_ipc_output_v2_appid(const QString& appid) {
+	this->mPending.hasAppId = true;
+	this->mPending.appId = appid;
 }
 
-void DwlIpcOutput::onLayoutSymbol(
-    void* data,
-    struct zdwl_ipc_output_v2* /*unused*/,
-    const char* layout
-) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasLayoutSymbol = true;
-	self->mPending.layoutSymbol = QString::fromUtf8(layout);
+void DwlIpcOutput::zdwl_ipc_output_v2_layout_symbol(const QString& layout) {
+	this->mPending.hasLayoutSymbol = true;
+	this->mPending.layoutSymbol = layout;
 }
 
-void DwlIpcOutput::onFullscreen(
-    void* data,
-    struct zdwl_ipc_output_v2* /*unused*/,
-    uint32_t isFullscreen
-) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasFullscreen = true;
-	self->mPending.fullscreen = isFullscreen != 0;
+void DwlIpcOutput::zdwl_ipc_output_v2_fullscreen(uint32_t is_fullscreen) {
+	this->mPending.hasFullscreen = true;
+	this->mPending.fullscreen = is_fullscreen != 0;
 }
 
-void DwlIpcOutput::onFloating(
-    void* data,
-    struct zdwl_ipc_output_v2* /*unused*/,
-    uint32_t isFloating
-) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasFloating = true;
-	self->mPending.floating = isFloating != 0;
+void DwlIpcOutput::zdwl_ipc_output_v2_floating(uint32_t is_floating) {
+	this->mPending.hasFloating = true;
+	this->mPending.floating = is_floating != 0;
 }
 
-void DwlIpcOutput::onFrame(void* data, struct zdwl_ipc_output_v2* /*unused*/) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	auto& p = self->mPending;
+void DwlIpcOutput::zdwl_ipc_output_v2_kb_layout(const QString& kb_layout) {
+	this->mPending.hasKbLayout = true;
+	this->mPending.kbLayout = kb_layout;
+}
 
-	if (p.hasActive && p.active != self->mActive) {
-		self->mActive = p.active;
-		emit self->activeChanged();
+void DwlIpcOutput::zdwl_ipc_output_v2_frame() {
+	auto& p = this->mPending;
+
+	if (p.hasActive && p.active != this->mActive) {
+		this->mActive = p.active;
+		emit this->activeChanged();
 	}
 
-	if (p.hasTitle && p.title != self->mTitle) {
-		self->mTitle = p.title;
-		emit self->titleChanged();
+	if (p.hasTitle && p.title != this->mTitle) {
+		this->mTitle = p.title;
+		emit this->titleChanged();
 	}
 
-	if (p.hasAppId && p.appId != self->mAppId) {
-		self->mAppId = p.appId;
-		emit self->appIdChanged();
+	if (p.hasAppId && p.appId != this->mAppId) {
+		this->mAppId = p.appId;
+		emit this->appIdChanged();
 	}
 
-	if (p.hasLayoutIndex && p.layoutIndex != self->mLayoutIndex) {
-		self->mLayoutIndex = p.layoutIndex;
-		emit self->layoutIndexChanged();
+	if (p.hasLayoutIndex && p.layoutIndex != this->mLayoutIndex) {
+		this->mLayoutIndex = p.layoutIndex;
+		emit this->layoutIndexChanged();
 	}
 
-	if (p.hasLayoutSymbol && p.layoutSymbol != self->mLayoutSymbol) {
-		self->mLayoutSymbol = p.layoutSymbol;
-		emit self->layoutSymbolChanged();
+	if (p.hasLayoutSymbol && p.layoutSymbol != this->mLayoutSymbol) {
+		this->mLayoutSymbol = p.layoutSymbol;
+		emit this->layoutSymbolChanged();
 	}
 
-	if (p.hasFullscreen && p.fullscreen != self->mFullscreen) {
-		self->mFullscreen = p.fullscreen;
-		emit self->fullscreenChanged();
+	if (p.hasFullscreen && p.fullscreen != this->mFullscreen) {
+		this->mFullscreen = p.fullscreen;
+		emit this->fullscreenChanged();
 	}
 
-	if (p.hasFloating && p.floating != self->mFloating) {
-		self->mFloating = p.floating;
-		emit self->floatingChanged();
+	if (p.hasFloating && p.floating != this->mFloating) {
+		this->mFloating = p.floating;
+		emit this->floatingChanged();
 	}
 
-	if (p.hasKbLayout && p.kbLayout != self->mKbLayout) {
-		self->mKbLayout = p.kbLayout;
-		emit self->kbLayoutChanged();
+	if (p.hasKbLayout && p.kbLayout != this->mKbLayout) {
+		this->mKbLayout = p.kbLayout;
+		emit this->kbLayoutChanged();
 	}
 
 	p = {};
-	emit self->frame();
-}
-
-void DwlIpcOutput::onKbLayout(
-    void* data,
-    struct zdwl_ipc_output_v2* /*unused*/,
-    const char* kbLayout
-) {
-	auto* self = static_cast<DwlIpcOutput*>(data);
-	self->mPending.hasKbLayout = true;
-	self->mPending.kbLayout = QString::fromUtf8(kbLayout);
+	emit this->frame();
 }
 
 } // namespace qs::dwl

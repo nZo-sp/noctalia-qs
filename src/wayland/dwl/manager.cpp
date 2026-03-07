@@ -1,29 +1,19 @@
 #include "manager.hpp"
-#include <cstdint>
 
-#include <QApplication>
 #include <QByteArray>
 #include <QGuiApplication>
-#include <QList>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QScreen>
 #include <QString>
 #include <Qt>
-#include <QtCore/qtmetamacros.h>
-#include <QtLogging>
-#include <QtMinMax>
 #include <QtTypes>
-#include <QtWaylandClient/QWaylandClientExtension>
-#include <qlist.h>
 #include <qpa/qplatformnativeinterface.h>
-#include <qstringlist.h>
+#include <qwaylandclientextension.h>
 #include <wayland-client-protocol.h>
-#include <wayland-util.h>
 
 #include "../../core/logcat.hpp"
 #include "output.hpp"
-#include "proto.hpp"
 
 namespace {
 QS_LOGGING_CATEGORY(logDwlIpc, "quickshell.dwl", QtWarningMsg);
@@ -31,12 +21,7 @@ QS_LOGGING_CATEGORY(logDwlIpc, "quickshell.dwl", QtWarningMsg);
 
 namespace qs::dwl {
 
-ZdwlIpcManagerV2Listener DwlIpcManager::listener = {
-    .tags = &DwlIpcManager::onTags,
-    .layout = &DwlIpcManager::onLayout,
-};
-
-DwlIpcManager::DwlIpcManager(): QWaylandClientExtension(2) {
+DwlIpcManager::DwlIpcManager(): QWaylandClientExtensionTemplate(2) {
 	connect(this, &QWaylandClientExtension::activeChanged, this, [this]() {
 		if (!this->isActive()) {
 			qCWarning(logDwlIpc) << "DWL is not active";
@@ -62,25 +47,11 @@ DwlIpcManager::DwlIpcManager(): QWaylandClientExtension(2) {
 }
 
 DwlIpcManager* DwlIpcManager::instance() {
-	static DwlIpcManager* instance = nullptr;
-	if (!instance) instance = new DwlIpcManager();
+	static auto* instance = new DwlIpcManager(); // NOLINT
 	return instance;
 }
 
-const wl_interface* DwlIpcManager::extensionInterface() const {
-	return &ZDWL_IPC_MANAGER_V2_INTERFACE;
-}
-
-void DwlIpcManager::bind(struct ::wl_registry* registry, int id, int version) {
-	this->mHandle = static_cast<struct zdwl_ipc_manager_v2*>(
-	    wl_registry_bind(registry, id, &ZDWL_IPC_MANAGER_V2_INTERFACE, qMin(version, 2))
-	);
-
-	zdwlIpcManagerV2AddListener(this->mHandle, &listener, this);
-}
-
 quint32 DwlIpcManager::tagCount() const { return this->mTagCount; }
-// NOLINTNEXTLINE(misc-include-cleaner)
 QStringList DwlIpcManager::layouts() const { return this->mLayouts; }
 QList<DwlIpcOutput*> DwlIpcManager::outputs() const { return this->mOutputs; }
 
@@ -111,7 +82,7 @@ void DwlIpcManager::onScreenRemoved(QScreen* screen) {
 DwlIpcOutput* DwlIpcManager::bindOutput(struct wl_output* wlOutput, const QString& name) {
 	if (auto* existing = this->mOutputMap.value(wlOutput, nullptr)) return existing;
 
-	auto* raw = zdwlIpcManagerV2GetOutput(this->mHandle, wlOutput);
+	auto* raw = this->get_output(wlOutput);
 	if (!raw) {
 		qCWarning(logDwlIpc) << "get_output returned null for" << name;
 		return nullptr;
@@ -134,19 +105,17 @@ void DwlIpcManager::removeOutput(struct wl_output* wlOutput) {
 	output->deleteLater();
 }
 
-void DwlIpcManager::onTags(void* data, struct zdwl_ipc_manager_v2* /*unused*/, uint32_t amount) {
-	auto* self = static_cast<DwlIpcManager*>(data);
-	if (amount == self->mTagCount) return;
+void DwlIpcManager::zdwl_ipc_manager_v2_tags(uint32_t amount) {
+	if (amount == this->mTagCount) return;
 
-	self->mTagCount = amount;
-	for (DwlIpcOutput* o: self->mOutputs) o->initTags(amount);
-	emit self->tagCountChanged();
+	this->mTagCount = amount;
+	for (DwlIpcOutput* o: this->mOutputs) o->initTags(amount);
+	emit this->tagCountChanged();
 }
 
-void DwlIpcManager::onLayout(void* data, struct zdwl_ipc_manager_v2* /*unused*/, const char* name) {
-	auto* self = static_cast<DwlIpcManager*>(data);
-	self->mLayouts.append(QString::fromUtf8(name));
-	emit self->layoutsChanged();
+void DwlIpcManager::zdwl_ipc_manager_v2_layout(const QString& name) {
+	this->mLayouts.append(name);
+	emit this->layoutsChanged();
 }
 
 } // namespace qs::dwl

@@ -3,10 +3,10 @@
 #include <QObject>
 #include <QStringList>
 #include <QtTypes>
-#include <manager.hpp>
 #include <qqmlintegration.h>
 #include <qtmetamacros.h>
 
+#include "manager.hpp"
 #include "output.hpp"
 
 namespace qs::dwl {
