@@ -1,6 +1,6 @@
 qt_add_library(quickshell-i3 STATIC)
 
-target_link_libraries(quickshell-i3 PRIVATE ${QT_DEPS})
+target_link_libraries(quickshell-i3 PRIVATE Qt::Quick)
 
 set(I3_MODULES)
 
