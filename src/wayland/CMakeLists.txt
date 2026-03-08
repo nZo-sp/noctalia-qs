@@ -122,6 +122,8 @@ if (NIRI)
 	add_subdirectory(niri)
 endif()
 
+add_subdirectory(windowmanager)
+
 add_subdirectory(idle_inhibit)
 list(APPEND WAYLAND_MODULES Quickshell.Wayland._IdleInhibitor)
 
