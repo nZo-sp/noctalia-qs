@@ -78,6 +78,7 @@ qt_add_library(quickshell-wayland STATIC
 	xdgshell.cpp
 	util.cpp
 	output_tracking.cpp
+	safe_dispatch.cpp
 )
 
 # required to make sure the constructor is linked
@@ -155,5 +156,10 @@ qs_add_module_deps_light(quickshell-wayland Quickshell)
 install_qml_module(quickshell-wayland)
 
 qs_module_pch(quickshell-wayland SET large)
+
+# Export symbols so our wl_proxy_destroy/wl_display_dispatch_queue_pending overrides
+# are visible to shared libraries (Qt, libwayland) via ELF symbol interposition.
+set_target_properties(quickshell PROPERTIES ENABLE_EXPORTS TRUE)
+target_link_libraries(quickshell-wayland PRIVATE ${CMAKE_DL_LIBS})
 
 target_link_libraries(quickshell PRIVATE quickshell-waylandplugin quickshell-wayland-init)
