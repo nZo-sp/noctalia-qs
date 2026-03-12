@@ -5,6 +5,7 @@
 #include <qlogging.h>
 #include <qobject.h>
 #include <qregion.h>
+#include <qtimer.h>
 #include <qtmetamacros.h>
 #include <qvariant.h>
 #include <qwindow.h>
@@ -33,6 +34,16 @@ BackgroundEffect* BackgroundEffect::qmlAttachedProperties(QObject* object) {
 }
 
 BackgroundEffect::BackgroundEffect(ProxyWindowBase* window): QObject(nullptr), proxyWindow(window) {
+	this->mFallbackTimer = new QTimer(this);
+	this->mFallbackTimer->setSingleShot(true);
+	this->mFallbackTimer->setInterval(32); // ~2 frames at 60fps; fires only if render loop is stalled
+	QObject::connect(
+	    this->mFallbackTimer,
+	    &QTimer::timeout,
+	    this,
+	    &BackgroundEffect::onFallbackTimerFired
+	);
+
 	QObject::connect(
 	    window,
 	    &ProxyWindowBase::windowConnected,
@@ -87,15 +98,19 @@ void BackgroundEffect::updateBlurRegion() {
 
 	this->pendingBlurRegion = true;
 
-	// Immediately commit the blur region without waiting for the render loop.
-	// This is critical after app launches: Niri may stop sending frame callbacks to the shell
-	// (since a new app window is in focus), causing schedulePolish() to never fire. Without an
-	// immediate commit, the old blur region stays visible until the next render frame, which may
-	// only happen when a new panel opens. The synchronized schedulePolish() path is kept for
-	// precision during active render frames (e.g. panel open/close animations).
-	this->commitBlurRegionNow();
-
+	// Schedule the blur update to be committed in sync with the next render frame.
+	// This ensures blur and panel visuals advance together during animations.
+	//
+	// To handle a stalled render loop (e.g. Niri stops sending frame callbacks when
+	// a new app window takes focus), a short fallback timer also commits the blur region
+	// directly if onWindowPolished() does not fire within ~2 frames. This replaces the
+	// previous unconditional commitBlurRegionNow() call, which caused blur to lead the
+	// panel during animations by committing outside the render loop.
 	this->proxyWindow->schedulePolish();
+
+	if (!this->mFallbackTimer->isActive()) {
+		this->mFallbackTimer->start();
+	}
 }
 
 void BackgroundEffect::commitBlurRegionNow() {
@@ -116,8 +131,17 @@ void BackgroundEffect::commitBlurRegionNow() {
 }
 
 void BackgroundEffect::onWindowPolished() {
+	this->mFallbackTimer->stop();
 	if (!this->pendingBlurRegion) return;
 	this->commitBlurRegionNow();
+}
+
+void BackgroundEffect::onFallbackTimerFired() {
+	// Render loop appears stalled (e.g. compositor stopped sending frame callbacks).
+	// Commit the blur region directly so it doesn't remain outdated indefinitely.
+	if (this->pendingBlurRegion) {
+		this->commitBlurRegionNow();
+	}
 }
 
 void BackgroundEffect::onWindowConnected() {
