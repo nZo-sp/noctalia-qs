@@ -5,6 +5,7 @@
 #include <private/qwaylandwindow_p.h>
 #include <qobject.h>
 #include <qqmlintegration.h>
+#include <qtimer.h>
 #include <qtmetamacros.h>
 #include <qwindow.h>
 
@@ -64,6 +65,7 @@ private slots:
 	void onWindowPolished();
 	void updateBlurRegion();
 	void commitBlurRegionNow();
+	void onFallbackTimerFired();
 
 private:
 	ProxyWindowBase* proxyWindow = nullptr;
@@ -73,6 +75,7 @@ private:
 	bool pendingBlurRegion = false;
 	PendingRegion* mBlurRegion = nullptr;
 	std::unique_ptr<impl::BackgroundEffectSurface> surface;
+	QTimer* mFallbackTimer = nullptr;
 };
 
 } // namespace qs::wayland::background_effect
