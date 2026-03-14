@@ -146,9 +146,13 @@ private:
 	std::vector<float> mWindow; // Hann window
 	std::vector<int> mBarBinLow; // lower FFT bin per bar
 	std::vector<int> mBarBinHigh; // upper FFT bin per bar
-	std::vector<float> mPrevBars; // for gravity/temporal smoothing
+	std::vector<float> mPrevBars; // previous output for comparison
+	std::vector<float> mPeak; // peak tracking for gravity falloff
+	std::vector<float> mFall; // fall accumulator per bar (gravity)
+	std::vector<float> mMem; // integral filter memory per bar
 	float mSensitivity = 1.0f;
 	float mPeakAvg = 0.0f;
+	bool mSensInit = true;
 
 	std::vector<std::complex<float>> mFftBuf;
 };

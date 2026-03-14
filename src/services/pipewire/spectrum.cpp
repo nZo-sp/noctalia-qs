@@ -424,7 +424,11 @@ void PwAudioSpectrum::rebuildStream() {
 	this->mIdleFrames = 0;
 	this->mPeakAvg = 0.0f;
 	this->mSensitivity = 0.01f;
+	this->mSensInit = true;
 	std::fill(this->mPrevBars.begin(), this->mPrevBars.end(), 0.0f);
+	std::fill(this->mPeak.begin(), this->mPeak.end(), 0.0f);
+	std::fill(this->mFall.begin(), this->mFall.end(), 0.0f);
+	std::fill(this->mMem.begin(), this->mMem.end(), 0.0f);
 
 	this->mFrameTimer.setInterval(1000 / this->mFrameRate);
 	this->mFrameTimer.start();
@@ -449,6 +453,9 @@ void PwAudioSpectrum::initProcessing() {
 	}
 
 	this->mPrevBars.assign(this->mBarCount, 0.0f);
+	this->mPeak.assign(this->mBarCount, 0.0f);
+	this->mFall.assign(this->mBarCount, 0.0f);
+	this->mMem.assign(this->mBarCount, 0.0f);
 	this->mValues = QList<float>(this->mBarCount, 0.0f);
 	this->computeBarBins();
 }
@@ -543,27 +550,60 @@ void PwAudioSpectrum::processFrame() {
 		bar = std::max(0.0f, bar - noiseGate);
 	}
 
-	// 6. Auto-sensitivity: dynamically adjust gain so the output fills the 0-1 range
-	//    regardless of input volume. When signal drops below a minimum threshold,
-	//    sensitivity decays to prevent amplifying noise.
-	float currentPeak = *std::max_element(bars.begin(), bars.end());
-	this->mPeakAvg = this->mPeakAvg * 0.95f + currentPeak * 0.05f;
-
-	constexpr float MIN_SIGNAL = 0.5f;
-	if (this->mPeakAvg > MIN_SIGNAL) {
-		float target = 0.8f / this->mPeakAvg;
-		this->mSensitivity = this->mSensitivity * 0.9f + target * 0.1f;
-		this->mSensitivity = std::clamp(this->mSensitivity, 0.001f, 20.0f);
-	} else {
-		this->mSensitivity *= 0.95f;
-		this->mSensitivity = std::max(this->mSensitivity, 0.001f);
-	}
-
+	// 6. Auto-sensitivity: apply current sensitivity, then adjust conservatively.
+	//    Mirrors cava's approach: 2% decrease on overshoot, 0.1% increase per frame.
 	for (auto& bar: bars) {
 		bar *= this->mSensitivity;
 	}
 
-	// 7. Monstercat-style spatial smoothing: each bar is influenced by its neighbors
+	// 7. Gravity falloff + integral smoothing (cava-style).
+	//    Gravity: when a bar drops, it falls from its stored peak with quadratic
+	//    acceleration, giving a natural physics-based decay.
+	//    Integral: IIR low-pass filter (memory * noiseReduction + current) damps
+	//    rapid transients for a smoother, less jittery response.
+	auto fps = static_cast<double>(this->mFrameRate);
+	double gravityMod = std::pow(60.0 / fps, 2.5) * 1.54 / std::max(this->mNoiseReduction, 0.01);
+	if (gravityMod < 1.0) gravityMod = 1.0;
+
+	bool overshoot = false;
+	bool silence = true;
+	for (int i = 0; i < this->mBarCount; i++) {
+		// Gravity falloff
+		if (bars[i] < this->mPrevBars[i] && this->mNoiseReduction > 0.1) {
+			bars[i] = static_cast<float>(
+			    static_cast<double>(this->mPeak[i])
+			    * (1.0 - static_cast<double>(this->mFall[i]) * static_cast<double>(this->mFall[i]) * gravityMod)
+			);
+			if (bars[i] < 0.0f) bars[i] = 0.0f;
+			this->mFall[i] += 0.028f;
+		} else {
+			this->mPeak[i] = bars[i];
+			this->mFall[i] = 0.0f;
+		}
+		this->mPrevBars[i] = bars[i];
+
+		// Integral smoothing
+		bars[i] = this->mMem[i] * static_cast<float>(this->mNoiseReduction) + bars[i];
+		this->mMem[i] = bars[i];
+
+		if (bars[i] > 1.0f) {
+			overshoot = true;
+			bars[i] = 1.0f;
+		}
+		if (bars[i] > 0.01f) silence = false;
+	}
+
+	// Auto-sensitivity adjustment (conservative, cava-style rates)
+	if (overshoot) {
+		this->mSensitivity *= 0.98f;
+		this->mSensInit = false;
+	} else if (!silence) {
+		this->mSensitivity *= 1.001f;
+		if (this->mSensInit) this->mSensitivity *= 1.1f;
+	}
+	this->mSensitivity = std::clamp(this->mSensitivity, 0.001f, 50.0f);
+
+	// 8. Monstercat-style spatial smoothing: each bar is influenced by its neighbors
 	//    to create a smoother, less jittery spectrum.
 	if (this->mSmoothing) {
 		constexpr float SMOOTH_FACTOR = 0.64f;
@@ -575,19 +615,6 @@ void PwAudioSpectrum::processFrame() {
 		}
 	}
 
-	// 8. Temporal smoothing: bars rise and fall smoothly for fluid animation.
-	//    Rise is fast but not instant; fall is slower. Both rates are frame-rate independent.
-	float fall = std::pow(0.05f, 1.0f / (1.1f * static_cast<float>(this->mFrameRate)));
-	float rise = std::pow(0.1f, 1.0f / (0.35f * static_cast<float>(this->mFrameRate)));
-	for (int i = 0; i < this->mBarCount; i++) {
-		if (bars[i] >= this->mPrevBars[i]) {
-			this->mPrevBars[i] = this->mPrevBars[i] * rise + bars[i] * (1.0f - rise);
-		} else {
-			this->mPrevBars[i] *= fall;
-		}
-		bars[i] = this->mPrevBars[i];
-	}
-
 	// 9. Clamp to 0-1
 	for (auto& bar: bars) {
 		bar = std::clamp(bar, 0.0f, 1.0f);
@@ -595,7 +622,7 @@ void PwAudioSpectrum::processFrame() {
 
 	// 10. Idle detection: if all bars are near zero for several consecutive frames,
 	//     stop emitting updates to save GPU rendering.
-	bool allZero = std::all_of(bars.begin(), bars.end(), [](float v) { return v < 0.01f; });
+	bool allZero = silence;
 	if (allZero) {
 		this->mIdleFrames++;
 		if (this->mIdleFrames >= IDLE_THRESHOLD) {
