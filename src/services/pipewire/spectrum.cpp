@@ -133,6 +133,7 @@ bool PwSpectrumStream::start() {
 	    PW_KEY_STREAM_MONITOR, "true",
 	    PW_KEY_STREAM_CAPTURE_SINK, this->node->type.testFlags(PwNodeType::Sink) ? "true" : "false",
 	    PW_KEY_TARGET_OBJECT, target.constData(),
+	    PW_KEY_NODE_PASSIVE, "true",
 	    nullptr
 	);
 	// clang-format on
