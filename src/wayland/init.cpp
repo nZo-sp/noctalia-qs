@@ -5,7 +5,6 @@
 #include <qtenvironmentvariables.h>
 
 #include "../core/plugin.hpp"
-#include "safe_dispatch.hpp"
 
 #ifdef QS_WAYLAND_WLR_LAYERSHELL
 #include "wlr_layershell/wlr_layershell.hpp"
@@ -34,7 +33,6 @@ class WaylandPlugin: public QsEnginePlugin {
 	}
 
 	void init() override {
-		qs::wayland::installWaylandSafeDispatch();
 		installPlatformMenuHook();
 		installPopupPositioner();
 	}
