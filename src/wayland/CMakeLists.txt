@@ -78,6 +78,7 @@ qt_add_library(quickshell-wayland STATIC
 	xdgshell.cpp
 	util.cpp
 	output_tracking.cpp
+	safe_dispatch.cpp
 )
 
 # required to make sure the constructor is linked
@@ -155,5 +156,9 @@ qs_add_module_deps_light(quickshell-wayland Quickshell)
 install_qml_module(quickshell-wayland)
 
 qs_module_pch(quickshell-wayland SET large)
+
+# wl_proxy_get_listener override for monitor hotplug crash workaround
+target_link_libraries(quickshell-wayland PRIVATE ${CMAKE_DL_LIBS})
+set_target_properties(quickshell PROPERTIES ENABLE_EXPORTS TRUE)
 
 target_link_libraries(quickshell PRIVATE quickshell-waylandplugin quickshell-wayland-init)
